@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bee Swarm Wordle</title>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <link rel="icon" type="image/x-icon" href="icon/basicbee.ico">
+    <style>
+        :root {
+            --correct: #6aaa64;
+            --present: #c9b458;
+            --absent: #787c7e;
+            --bg: #fffbe6;
+            --header-bg: #f1c40f;
+            --text: #2c3e50;
+            --tile-border: #d3d6da;
+            --tile-bg: #ffffff;
+        }
+
+        /* Themes */
+        body.theme-honey { --bg: #fffbe6; --header-bg: #f1c40f; --text: #2c3e50; --tile-bg: #ffffff; }
+        body.theme-blue { --bg: #e3f2fd; --header-bg: #2196f3; --text: #0d47a1; --tile-bg: #ffffff; }
+        body.theme-red { --bg: #ffebee; --header-bg: #f44336; --text: #b71c1c; --tile-bg: #ffffff; }
+        body.theme-green { --bg: #f1f8e9; --header-bg: #8bc34a; --text: #33691e; --tile-bg: #ffffff; }
+        body.theme-dark { 
+            --bg: #121213; 
+            --header-bg: #1a1a1b; 
+            --text: #ffffff; 
+            --tile-border: #3a3a3c;
+            --tile-bg: #121213;
+        }
+        body.theme-radioactive { 
+            --bg: #0a0f0a; 
+            --header-bg: #39ff14; 
+            --text: #39ff14; 
+            --tile-border: #39ff14;
+            --tile-bg: #111;
+            --correct: #2db300;
+        }
+        body.theme-radioactive header { color: #000; }
+
+        body {
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            min-height: 100vh;
+            transition: background 0.5s ease;
+            overflow-x: hidden;
+        }
+
+        header {
+            width: 100%;
+            max-width: 600px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 20px;
+            background: var(--header-bg);
+            color: white;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            z-index: 10;
+            box-sizing: border-box; 
+        }
+
+        .pollen-display {
+            font-weight: 800;
+            background: rgba(0,0,0,0.1);
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            display: flex; align-items: center; gap: 5px;
+        }
+
+        .header-btns { display: flex; gap: 8px; }
+
+        .icon-btn {
+            font-size: 20px;
+            background: rgba(255,255,255,0.2);
+            border: none;
+            cursor: pointer;
+            padding: 5px 8px;
+            border-radius: 8px;
+            transition: transform 0.2s, background 0.2s;
+            color: white; 
+        }
+        .icon-btn:hover { transform: scale(1.1); background: rgba(255,255,255,0.3); }
+
+        #message-container {
+            height: 40px; margin: 10px; font-weight: bold; 
+            text-transform: uppercase; display: flex; align-items: center; 
+            justify-content: center; text-align: center;
+        }
+
+        #game-board {
+            display: grid;
+            grid-gap: 6px;
+            margin-bottom: 20px;
+            padding: 10px;
+            z-index: 2; /* Keep above stickers */
+        }
+
+        .tile {
+            width: clamp(35px, 9vw, 60px);
+            height: clamp(35px, 9vw, 60px);
+            border: 2px solid var(--tile-border);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-weight: 800;
+            text-transform: uppercase;
+            background: var(--tile-bg);
+            color: var(--text);
+            font-size: 1.5rem;
+            user-select: none;
+            transition: border-color 0.2s, background-color 0.2s;
+        }
+
+        .correct { background-color: var(--correct) !important; color: white !important; border-color: var(--correct) !important; }
+        .present { background-color: var(--present) !important; color: white !important; border-color: var(--present) !important; }
+        .absent { background-color: var(--absent) !important; color: white !important; border-color: var(--absent) !important; }
+        .tile.flip { animation: flip 0.6s ease-in-out forwards; }
+        .tile.pop { animation: pop 0.1s ease-in-out; border-color: var(--text); }
+
+        @keyframes pop { 0% { transform: scale(1); } 50% { transform: scale(1.15); } 100% { transform: scale(1); } }
+        @keyframes flip { 0% { transform: rotateX(0deg); } 50% { transform: rotateX(90deg); } 100% { transform: rotateX(0deg); } }
+
+        #keyboard { width: 100%; max-width: 500px; padding: 10px; margin-top: auto; padding-bottom: 20px; z-index: 2; }
+        .key-row { display: flex; justify-content: center; margin-bottom: 8px; gap: 4px; }
+        .key {
+            background-color: #d3d6da; border: none; border-radius: 4px;
+            padding: 15px 0; font-weight: bold; cursor: pointer; flex: 1; 
+            color: #2c3e50; transition: background 0.2s; font-size: 0.9rem;
+        }
+        .key:active { transform: scale(0.95); }
+
+        /* MODALS */
+        .overlay {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);
+            justify-content: center; align-items: center; z-index: 100;
+        }
+        .modal {
+            background: white; padding: 25px; border-radius: 20px;
+            text-align: center; width: 85%; max-width: 400px; color: #2c3e50;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            max-height: 80vh; overflow-y: auto;
+        }
+
+        body.theme-dark .modal { background: #1a1a1b; color: white; }
+        body.theme-radioactive .modal { background: #111; color: #39ff14; border: 2px solid #39ff14; }
+
+        .theme-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 15px; }
+        .theme-btn {
+            padding: 10px; border: 2px solid #ddd; border-radius: 10px;
+            cursor: pointer; font-weight: bold; font-size: 0.9rem;
+        }
+
+        /* SHOP IMPROVEMENTS */
+        .shop-container { display: flex; flex-direction: column; gap: 12px; margin-top: 15px; }
+        .shop-card {
+            background: #f9f9f9; border: 2px solid #e0e0e0; border-radius: 15px;
+            padding: 12px; display: flex; align-items: center; gap: 15px;
+            text-align: left;
+        }
+        body.theme-dark .shop-card { background: #2a2a2c; border-color: #3a3a3c; }
+        .shop-card img { width: 50px; height: 50px; border-radius: 10px; object-fit: cover; background: #eee; }
+        .shop-card-info { flex-grow: 1; }
+        .shop-card-info h4 { margin: 0 0 4px 0; font-size: 1rem; }
+        .shop-card-info p { margin: 0; font-size: 0.8rem; color: #666; }
+        body.theme-dark .shop-card-info p { color: #bbb; }
+        .shop-card-bonus { color: var(--correct); font-weight: bold; font-size: 0.75rem; margin-top: 4px; }
+        
+        .buy-btn {
+            background: var(--header-bg); color: white; border: none; padding: 8px 12px;
+            border-radius: 8px; font-weight: bold; cursor: pointer; min-width: 70px;
+        }
+        .buy-btn:disabled { background: #ccc; cursor: not-allowed; }
+        .shop-card.owned { border-color: var(--correct); background: #f0fff0; }
+        body.theme-dark .shop-card.owned { background: #1b2e1b; border-color: var(--correct); }
+
+        /* BADGE SYSTEM */
+        .badge-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 15px; }
+        .badge-item {
+            background: #eee; padding: 10px; border-radius: 12px; font-size: 0.7rem;
+            display: flex; flex-direction: column; align-items: center; opacity: 0.3;
+            filter: grayscale(1);
+        }
+        body.theme-dark .badge-item { background: #333; }
+        .badge-item.unlocked { opacity: 1; filter: grayscale(0); border: 2px solid gold; background: #fffde7; color: #000; }
+        .badge-icon { font-size: 1.5rem; margin-bottom: 5px; }
+
+        .btn-primary {
+            background: var(--header-bg); color: white; border: none;
+            padding: 12px 30px; font-weight: bold; cursor: pointer; 
+            border-radius: 50px; margin-top: 20px; font-size: 1rem;
+        }
+        
+        /* Stats Box */
+        .stats-box { background: rgba(0,0,0,0.05); padding: 15px; border-radius: 10px; margin: 20px 0; }
+
+        /* --- STICKER MARGIN SYSTEM --- */
+        .sticker-layer {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; /* Allows clicking through stickers */
+            z-index: 1;
+            overflow: hidden;
+        }
+
+        .margin-sticker {
+            position: absolute;
+            width: 90px;
+            height: 90px;
+            object-fit: contain;
+            filter: drop-shadow(3px 3px 2px rgba(0,0,0,0.2));
+            transition: transform 0.3s ease;
+        }
+        
+        .margin-sticker:hover { transform: scale(1.1) rotate(5deg); }
+
+        /* Specific Spots for Each Sticker ID */
+        /* Left Column */
+        .spot-0 { top: 15%; left: 20px; transform: rotate(-10deg); } /* Doodle S */
+        .spot-2 { top: 40%; left: 20px; transform: rotate(5deg); }   /* Giraffe */
+        .spot-4 { top: 65%; left: 20px; transform: rotate(-5deg); }  /* Auryn */
+
+        /* Right Column */
+        .spot-1 { top: 15%; right: 20px; transform: rotate(10deg); } /* Scorpion */
+        .spot-3 { top: 40%; right: 20px; transform: rotate(-5deg); } /* Round Bee */
+        .spot-5 { top: 65%; right: 20px; transform: rotate(8deg); }  /* Nessie */
+
+        /* Hide stickers on small screens (Mobile) */
+        @media (max-width: 950px) {
+            .sticker-layer { display: none; }
+        }
+    </style>
+</head>
+<body class="theme-honey">
+
+<div id="bg-stickers" class="sticker-layer"></div>
+
+<header>
+    <div class="pollen-display">🌻 <span id="header-pollen">0</span></div>
+    <h2 style="margin:0; letter-spacing: 1px; font-size: 1.2rem;">BUZZLE 🐝</h2>
+    <div class="header-btns">
+        <button class="icon-btn" onclick="toggleShopMenu()" title="Shop">🏪</button>
+        <button class="icon-btn" onclick="toggleBadgeMenu()" title="Badges">🏅</button>
+        <button class="icon-btn" onclick="toggleThemeMenu()" title="Themes">🎨</button>
+        <button class="icon-btn" onclick="showHint()" title="Hint">💡</button>
+        <button class="icon-btn" onclick="toggleStats()" title="Statistics">📊</button>
+    </div>
+</header>
+
+<div id="message-container"></div>
+<div id="game-board"></div>
+
+<div id="keyboard">
+    <div class="key-row">
+        <button class="key" onclick="handleInput('Q')">Q</button>
+        <button class="key" onclick="handleInput('W')">W</button>
+        <button class="key" onclick="handleInput('E')">E</button>
+        <button class="key" onclick="handleInput('R')">R</button>
+        <button class="key" onclick="handleInput('T')">T</button>
+        <button class="key" onclick="handleInput('Y')">Y</button>
+        <button class="key" onclick="handleInput('U')">U</button>
+        <button class="key" onclick="handleInput('I')">I</button>
+        <button class="key" onclick="handleInput('O')">O</button>
+        <button class="key" onclick="handleInput('P')">P</button>
+    </div>
+    <div class="key-row">
+        <button class="key" onclick="handleInput('A')">A</button>
+        <button class="key" onclick="handleInput('S')">S</button>
+        <button class="key" onclick="handleInput('D')">D</button>
+        <button class="key" onclick="handleInput('F')">F</button>
+        <button class="key" onclick="handleInput('G')">G</button>
+        <button class="key" onclick="handleInput('H')">H</button>
+        <button class="key" onclick="handleInput('J')">J</button>
+        <button class="key" onclick="handleInput('K')">K</button>
+        <button class="key" onclick="handleInput('L')">L</button>
+    </div>
+    <div class="key-row">
+        <button class="key" style="flex:1.5" onclick="handleInput('Enter')">ENTER</button>
+        <button class="key" onclick="handleInput('Z')">Z</button>
+        <button class="key" onclick="handleInput('X')">X</button>
+        <button class="key" onclick="handleInput('C')">C</button>
+        <button class="key" onclick="handleInput('V')">V</button>
+        <button class="key" onclick="handleInput('B')">B</button>
+        <button class="key" onclick="handleInput('N')">N</button>
+        <button class="key" onclick="handleInput('M')">M</button>
+        <button class="key" style="flex:1.5" onclick="handleInput('Backspace')">DEL</button>
+    </div>
+</div>
+
+<div id="overlay" class="overlay">
+    <div class="modal">
+        <h1 id="modal-status" style="margin-top:0">GAME OVER</h1>
+        <h2 id="modal-msg"></h2>
+        <div class="stats-box">
+            <p>Played: <span id="s-played">0</span></p>
+            <p>Wins: <span id="s-wins">0</span></p>
+            <p>Streak: <span id="s-streak">0</span></p>
+            <p>Total Pollen: 🌻 <span id="s-pollen">0</span></p>
+        </div>
+        <button class="btn-primary" onclick="resetGame()">PLAY AGAIN</button>
+        <button class="btn-primary" style="margin-top:10px; background:#777;" onclick="document.getElementById('overlay').style.display='none'">CLOSE</button>
+    </div>
+</div>
+
+<div id="badge-overlay" class="overlay">
+    <div class="modal">
+        <h2 style="margin-top:0">Badges</h2>
+        <div class="badge-grid" id="badge-container"></div>
+        <button class="btn-primary" onclick="toggleBadgeMenu()">CLOSE</button>
+    </div>
+</div>
+
+<div id="theme-overlay" class="overlay">
+    <div class="modal">
+        <h2 style="margin-top:0">Choose Theme</h2>
+        <div class="theme-grid">
+            <button class="theme-btn" style="background:#fffbe6;" onclick="applyTheme('theme-honey')">Honey</button>
+            <button class="theme-btn" style="background:#e3f2fd;" onclick="applyTheme('theme-blue')">Blue</button>
+            <button class="theme-btn" style="background:#ffebee;" onclick="applyTheme('theme-red')">Red</button>
+            <button class="theme-btn" style="background:#f1f8e9;" onclick="applyTheme('theme-green')">Green</button>
+            <button class="theme-btn" style="background:#121213; color: white;" onclick="applyTheme('theme-dark')">Dark</button>
+            <button class="theme-btn" style="background:#eee;" onclick="applyTheme('random')">Random</button>
+            <button id="radioactive-theme-btn" class="theme-btn" style="background:#0a0f0a; color:#39ff14; display:none;" onclick="applyTheme('theme-radioactive')">☢️ Radioactive</button>
+        </div>
+        <button class="btn-primary" onclick="toggleThemeMenu()">CLOSE</button>
+    </div>
+</div>
+
+<div id="shop-overlay" class="overlay">
+    <div class="modal" style="max-width: 450px;">
+        <h2 style="margin-top:0">Bee Shop</h2>
+        <div class="shop-container" id="shop-items-container"></div>
+        <button class="btn-primary" onclick="toggleShopMenu()">CLOSE</button>
+    </div>
+</div>
+
+<script>
+    const BEES = ["Barbie Bee", "Bear Bee", "Fuzzy Bee", "Festive Bee", "Diamond Bee", "Digital Bee", "Buoyant Bee", "Precise Bee", "Spicy Bee", "Tadpole Bee", "Vector Bee", "Photon Bee", "Tabby Bee", "Bubble Bee", "Fire Bee", "Bucko Bee", "Riley Bee", "Gummy Bee", "Honey Bee", "Music Bee", "Shy Bee", "Windy Bee", "Baby Bee", "Basic Bee", "Bomber Bee", "Bumble Bee", "Frosty Bee", "Demon Bee", "Stubborn Bee", "Rage Bee", "Shocked Bee", "Carpenter Bee", "Ninja Bee", "Cobalt Bee", "Crimson Bee", "Vicious Bee", "Hasty Bee", "Exhausted Bee", "Brave Bee", "Puppy Bee", "Cool Bee", "Looker Bee", "Rad Bee", "Rascal Bee", "Commander Bee", "Demo Bee", "Lion Bee"];
+    const BEARS = ["Black Bear", "Mother Bear", "Brown Bear", "Panda Bear", "Science Bear", "Dapper Bear", "Polar Bear", "Robo Bear", "Spirit Bear", "Bee Bear", "Gummy Bear", "Sun Bear", "Tunnel Bear", "Shadow Bear", "Snowbear"];
+    const FIELDS = ["Sunflower", "Dandelion", "Mushroom", "Blue Flower", "Clover", "Strawberry", "Spider", "Bamboo", "Pineapple", "Stump", "Cactus", "Pumpkin", "Pine Tree", "Rose", "Hub", "Mountain Top", "Pepper", "Coconut", "Ant", "Mixed Brick", "Blue Brick", "Red Brick", "White Brick"];
+    const TOOLS = ["Scooper", "Rake", "Clippers", "Magnet", "Vacuum", "Super-Scooper", "Pulsar", "Electro-Magnet", "Scissors", "Honey Dipper", "Bubble Wand", "Scythe", "Sticker-Seeker", "Golden Rake", "Spark Staff", "Porcelain Dipper", "Petal Wand", "Tide Popper", "Dark Scythe", "Gummyballer"];
+
+    const WORD_LIST = [...BEES, ...BEARS, ...FIELDS, ...TOOLS];
+    const CLEAN_LIST = WORD_LIST.map(w => w.replace(/-|\s/g, '').toUpperCase());
+
+    // SHOP ITEMS (Added 3 more + Theme)
+     const ITEMS = [
+        { id: 0, type: 'sticker', name: "Doodle S", cost: 50, bonus: "+5 Bonus Pollen", desc: "A neat shape only cool people can draw.", img: "stickers/doodle-s.png" },
+        { id: 1, type: 'sticker', name: "Little Scorpion", cost: 100, bonus: "+10 Bonus Pollen", desc: "Sorta looks like a lobster.", img: "stickers/little-scorpion.png" },
+        { id: 2, type: 'sticker', name: "Giraffe", cost: 150, bonus: "+15 Bonus Pollen", desc: "So tall even horses get dizzy", img: "stickers/giraffe.png" },
+        { id: 3, type: 'sticker', name: "Round Basic Bee", cost: 200, bonus: "+20 Bonus Pollen", desc: "An unaturally round sight.", img: "stickers/round-basic-bee.png" },
+        { id: 4, type: 'sticker', name: "Auryn", cost: 300, bonus: "+25 Bonus Pollen", desc: "A weary and never-ending cycle.", img: "stickers/auryn.png" },
+        { id: 5, type: 'sticker', name: "Nessie", cost: 500, bonus: "+30 Bonus Pollen", desc: "The lonely Loch Ness beast.", img: "stickers/nessie.png" },
+        { id: 99, type: 'theme', name: "Radioactive Paint", cost: 1000, bonus: "Unlocks New Theme", desc: "Glowing green theme!", img: "stickers/radioactive.png" }
+    ];
+
+    const BADGE_LIST = [
+        { id: 'b1', name: "Novice", icon: "🥉", req: "Win 1 game" },
+        { id: 'b2', name: "Apprentice", icon: "🥈", req: "Win 5 games" },
+        { id: 'b3', name: "Master", icon: "🥇", req: "Win 25 games" },
+        { id: 'b4', name: "Rich", icon: "💰", req: "1,000 Pollen" },
+        { id: 'b5', name: "Collector", icon: "🗃️", req: "Buy 1 Item" },
+        { id: 'b6', name: "Elite", icon: "👑", req: "Buy 5 Items" }
+    ];
+
+    let targetWord = "";
+    let rawTargetWord = "";
+    let currentRow = 0;
+    let currentTile = 0;
+    let gameOver = false;
+    let isAnimating = false;
+    
+    // SAFE INITIALIZATION
+    let stats = JSON.parse(localStorage.getItem('bssWordleStats')) || { played: 0, wins: 0, streak: 0, pollen: 0, items: [] };
+    if (!stats.items) stats.items = []; // Backwards compatibility fix
+    
+    let currentTheme = localStorage.getItem('bssWordleTheme') || 'random';
+
+    function initGame() {
+        if (currentTheme === 'random') {
+            const themes = ['theme-honey', 'theme-blue', 'theme-red', 'theme-green'];
+            document.body.className = themes[Math.floor(Math.random() * themes.length)];
+        } else {
+            document.body.className = currentTheme;
+        }
+
+        document.getElementById('header-pollen').textContent = stats.pollen || 0;
+        
+        // Pick word
+        rawTargetWord = WORD_LIST[Math.floor(Math.random() * WORD_LIST.length)];
+        targetWord = rawTargetWord.replace(/-|\s/g, '').toUpperCase();
+
+        // Setup Board
+        const board = document.getElementById('game-board');
+        board.innerHTML = '';
+        board.style.gridTemplateColumns = `repeat(${targetWord.length}, 1fr)`;
+
+        for (let i = 0; i < 5 * targetWord.length; i++) {
+            const tile = document.createElement('div');
+            tile.classList.add('tile');
+            tile.id = 'tile-' + i;
+            board.appendChild(tile);
+        }
+
+        currentRow = 0;
+        currentTile = 0;
+        gameOver = false;
+        isAnimating = false;
+        document.getElementById('message-container').textContent = "";
+        
+        // Reset Keyboard Colors
+        document.querySelectorAll('.key').forEach(k => {
+            k.classList.remove('correct', 'present', 'absent');
+        });
+
+        // Initialize Stickers on Margins
+        renderBackgroundStickers();
+    }
+
+    // --- NEW FUNCTION: RENDER MARGIN STICKERS ---
+    function renderBackgroundStickers() {
+        const layer = document.getElementById('bg-stickers');
+        layer.innerHTML = ''; // Clear current
+        
+        ITEMS.forEach(item => {
+            // Only draw STICKERS (id < 90) that the user OWNS
+            if (item.type === 'sticker' && stats.items.includes(item.id)) {
+                const img = document.createElement('img');
+                img.src = item.img;
+                // Add base class and specific spot class based on ID (spot-0, spot-1, etc)
+                img.className = `margin-sticker spot-${item.id}`;
+                layer.appendChild(img);
+            }
+        });
+    }
+
+    // --- MENUS ---
+
+    function toggleThemeMenu() {
+        const menu = document.getElementById('theme-overlay');
+        if (menu.style.display === 'flex') {
+            menu.style.display = 'none';
+        } else {
+            menu.style.display = 'flex';
+            // Show radioactive button only if purchased
+            document.getElementById('radioactive-theme-btn').style.display = 
+                stats.items.includes(99) ? 'flex' : 'none';
+        }
+    }
+
+    function toggleShopMenu() {
+        const menu = document.getElementById('shop-overlay');
+        const isOpening = menu.style.display !== 'flex';
+        menu.style.display = isOpening ? 'flex' : 'none';
+        if (isOpening) renderShop();
+    }
+
+    function toggleBadgeMenu() {
+        const menu = document.getElementById('badge-overlay');
+        const isOpening = menu.style.display !== 'flex';
+        menu.style.display = isOpening ? 'flex' : 'none';
+        if (isOpening) renderBadges();
+    }
+
+    function toggleStats() {
+        // Just show stats without the game over context
+        document.getElementById('modal-status').textContent = "STATISTICS";
+        document.getElementById('modal-status').style.color = "var(--text)";
+        document.getElementById('modal-msg').textContent = "";
+        document.getElementById('s-played').textContent = stats.played;
+        document.getElementById('s-wins').textContent = stats.wins;
+        document.getElementById('s-streak').textContent = stats.streak;
+        document.getElementById('s-pollen').textContent = stats.pollen;
+        document.getElementById('overlay').style.display = 'flex';
+    }
+
+    function renderShop() {
+        const container = document.getElementById('shop-items-container');
+        container.innerHTML = '';
+        ITEMS.forEach(item => {
+            const isOwned = stats.items.includes(item.id);
+            const canAfford = stats.pollen >= item.cost;
+            const card = document.createElement('div');
+            card.className = `shop-card ${isOwned ? 'owned' : ''}`;
+            
+            card.innerHTML = `
+                <img src="${item.img}" alt="${item.name}">
+                <div class="shop-card-info">
+                    <h4>${item.name}</h4>
+                    <p>${item.desc}</p>
+                    <div class="shop-card-bonus">${item.bonus}</div>
+                </div>
+                <button class="buy-btn" ${isOwned || !canAfford ? 'disabled' : ''} onclick="buyItem(${item.id}, ${item.cost})">
+                    ${isOwned ? 'Owned' : item.cost + ' 🌻'}
+                </button>
+            `;
+            container.appendChild(card);
+        });
+    }
+
+    function buyItem(id, cost) {
+        if (stats.pollen >= cost) {
+            stats.pollen -= cost;
+            stats.items.push(id);
+            saveStats();
+            document.getElementById('header-pollen').textContent = stats.pollen;
+            renderShop();
+            
+            // Re-render margins immediately to show new sticker
+            renderBackgroundStickers();
+
+            if (id === 99) {
+                showMsg("New Theme Unlocked!");
+            } else {
+                showMsg("Sticker Bought! Bonus Active!");
+            }
+        } else {
+            showMsg("Not enough pollen!");
+        }
+    }
+
+    function renderBadges() {
+        const container = document.getElementById('badge-container');
+        container.innerHTML = '';
+        BADGE_LIST.forEach(b => {
+            let unlocked = false;
+            if (b.id === 'b1' && stats.wins >= 1) unlocked = true;
+            if (b.id === 'b2' && stats.wins >= 5) unlocked = true;
+            if (b.id === 'b3' && stats.wins >= 25) unlocked = true;
+            if (b.id === 'b4' && stats.pollen >= 1000) unlocked = true;
+            if (b.id === 'b5' && stats.items.length >= 1) unlocked = true;
+            if (b.id === 'b6' && stats.items.length >= 5) unlocked = true;
+
+            const item = document.createElement('div');
+            item.className = `badge-item ${unlocked ? 'unlocked' : ''}`;
+            item.innerHTML = `
+                <div class="badge-icon">${b.icon}</div>
+                <strong>${b.name}</strong>
+                <span>${unlocked ? 'Unlocked' : b.req}</span>
+            `;
+            container.appendChild(item);
+        });
+    }
+
+    function applyTheme(theme) {
+        currentTheme = theme;
+        localStorage.setItem('bssWordleTheme', theme);
+        if (theme === 'random') {
+            const themes = ['theme-honey', 'theme-blue', 'theme-red', 'theme-green'];
+            document.body.className = themes[Math.floor(Math.random() * themes.length)];
+        } else {
+            document.body.className = theme;
+        }
+        toggleThemeMenu();
+    }
+
+    function showHint() {
+        if (gameOver) return;
+        let type = "";
+        if (BEARS.includes(rawTargetWord)) type = "🐻 Bear";
+        else if (FIELDS.includes(rawTargetWord)) type = "🌱 Field";
+        else if (TOOLS.includes(rawTargetWord)) type = "🛠️ Tool";
+        else type = "🐝 Bee";
+        
+        const firstLetter = targetWord[0];
+        showMsg(`Hint: ${type} starting with ${firstLetter}`);
+    }
+
+    // --- GAME LOGIC ---
+
+    function handleInput(key) {
+        if (gameOver || isAnimating) return;
+        const len = targetWord.length;
+        const start = currentRow * len;
+        const end = start + len;
+
+        if (key === 'Enter') {
+            if (currentTile === end) checkGuess();
+            else showMsg("Too short!");
+        } else if (key === 'Backspace') {
+            if (currentTile > start) {
+                currentTile--;
+                const tile = document.getElementById('tile-' + currentTile);
+                tile.textContent = "";
+                tile.classList.remove('pop');
+            }
+        } else if (key.length === 1 && currentTile < end) {
+            const tile = document.getElementById('tile-' + currentTile);
+            tile.textContent = key.toUpperCase();
+            tile.classList.add('pop');
+            currentTile++;
+        }
+    }
+
+    async function checkGuess() {
+        const len = targetWord.length;
+        const start = currentRow * len;
+        let guess = "";
+        for (let i = 0; i < len; i++) {
+            guess += document.getElementById('tile-' + (start + i)).textContent;
+        }
+
+        if (!CLEAN_LIST.includes(guess)) {
+            showMsg("Not in the list!");
+            return;
+        }
+
+        isAnimating = true;
+        let targetArr = targetWord.split('');
+        let guessArr = guess.split('');
+        let result = new Array(len).fill('absent');
+
+        // Check Correct
+        for (let i = 0; i < len; i++) {
+            if (guessArr[i] === targetArr[i]) {
+                result[i] = 'correct';
+                targetArr[i] = null;
+                guessArr[i] = null;
+            }
+        }
+        // Check Present
+        for (let i = 0; i < len; i++) {
+            if (guessArr[i] && targetArr.includes(guessArr[i])) {
+                result[i] = 'present';
+                targetArr[targetArr.indexOf(guessArr[i])] = null;
+            }
+        }
+
+        // Animate
+        for (let i = 0; i < len; i++) {
+            const tile = document.getElementById('tile-' + (start + i));
+            tile.classList.add('flip');
+            await new Promise(r => setTimeout(r, 250)); // Original delay
+            tile.classList.add(result[i]);
+            
+            // Color Keyboard
+            const letter = tile.textContent;
+            const keyBtn = Array.from(document.querySelectorAll('.key')).find(k => k.textContent === letter);
+            if (keyBtn) {
+                if (result[i] === 'correct') keyBtn.className = 'key correct';
+                else if (result[i] === 'present' && !keyBtn.classList.contains('correct')) keyBtn.className = 'key present';
+                else if (result[i] === 'absent' && !keyBtn.classList.contains('correct') && !keyBtn.classList.contains('present')) keyBtn.className = 'key absent';
+            }
+        }
+
+        isAnimating = false;
+        if (guess === targetWord) finish(true);
+        else if (currentRow === 4) finish(false);
+        else { currentRow++; currentTile = currentRow * len; }
+    }
+
+    function showMsg(m) {
+        const container = document.getElementById('message-container');
+        container.textContent = m;
+        setTimeout(() => { if(container.textContent === m) container.textContent = ""; }, 3000);
+    }
+
+    function saveStats() {
+        localStorage.setItem('bssWordleStats', JSON.stringify(stats));
+    }
+
+    function finish(win) {
+        gameOver = true;
+        stats.played++;
+        
+        // Modal Setup
+        const status = document.getElementById('modal-status');
+        const msg = document.getElementById('modal-msg');
+
+        if (win) {
+            stats.wins++;
+            stats.streak++;
+            
+            // Calculate Bonus based on owned STICKERS only (id < 90)
+            const ownedStickers = stats.items.filter(id => id < 90).length;
+            const base = 10;
+            const bonus = ownedStickers * 5; 
+            const total = base + bonus;
+            
+            stats.pollen = (stats.pollen || 0) + total; 
+            
+            status.textContent = "BEE-RILLIANT! 🍯";
+            status.style.color = "var(--correct)";
+            msg.textContent = `+${total} Pollen (Bonus: ${bonus})`;
+            confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
+        } else {
+            stats.streak = 0;
+            status.textContent = "GAME OVER 💀";
+            status.style.color = "#e74c3c";
+            msg.textContent = "Answer: " + rawTargetWord;
+        }
+        
+        saveStats();
+        document.getElementById('header-pollen').textContent = stats.pollen;
+        document.getElementById('s-played').textContent = stats.played;
+        document.getElementById('s-wins').textContent = stats.wins;
+        document.getElementById('s-streak').textContent = stats.streak;
+        document.getElementById('s-pollen').textContent = stats.pollen;
+
+        setTimeout(() => { document.getElementById('overlay').style.display = 'flex'; }, 800);
+    }
+
+    function resetGame() {
+        document.getElementById('overlay').style.display = 'none';
+        initGame();
+    }
+
+    window.addEventListener('keydown', (e) => {
+        if (e.key === "Backspace" || e.key === "Enter" || /^[a-zA-Z]$/.test(e.key)) {
+            handleInput(e.key);
+        }
+    });
+
+    initGame();
+</script>
+</body>
+</html>
